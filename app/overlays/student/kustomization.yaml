@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# ── deploy.sh substitutes these placeholders before applying ──────────────────
+# ── Bob substitutes these placeholders before applying ────────────────────────
 namespace: STUDENT_NAMESPACE_PLACEHOLDER
 
 resources:
@@ -18,7 +18,7 @@ patches:
       value: INFERENCE_URL_PLACEHOLDER
 
 # 2. Patch backend Deployment env vars to use the student-specific secret name
-#    (deploy.sh replaces STUDENT_SECRET_NAME_PLACEHOLDER with e.g. student01-data-connection)
+#    (Bob replaces STUDENT_SECRET_NAME_PLACEHOLDER with e.g. student01-data-connection)
 - target:
     kind: Deployment
     name: backend

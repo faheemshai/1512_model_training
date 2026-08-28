@@ -26,8 +26,7 @@ A single `git clone` inside your workbench gives you all notebooks, images, and 
     │   └── 05-batch-classify.ipynb
     └── 05-app/
         ├── base/               ← Kustomize base (postgresql, backend, frontend)
-        ├── overlays/student/   ← Student-specific overlay
-        └── deploy.sh           ← One-command app deployment
+        └── overlays/student/   ← Student-specific overlay
 ```
 
 ## How it works (student workflow)

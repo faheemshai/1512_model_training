@@ -65,7 +65,7 @@ data:
       </div>
 
       <script>
-        const BACKEND = '__BACKEND_URL__';  // replaced by deploy.sh at apply time
+        const BACKEND = '__BACKEND_URL__';  // replaced by Bob at apply time
 
         function previewImage(e) {
           const file = e.target.files[0];
