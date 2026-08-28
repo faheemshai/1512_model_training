@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-app-code
+data:
+  main.py: |
+    import os, json, base64, io, time
+    from fastapi import FastAPI, UploadFile, File, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    import requests
+    import numpy as np
+    from PIL import Image
+    import psycopg2
+    import boto3
+    from botocore.client import Config
+
+    app = FastAPI(title="Image Classifier API")
+    app.add_middleware(CORSMiddleware, allow_origins=["*"],
+                       allow_methods=["*"], allow_headers=["*"])
+
+    INFERENCE_URL = os.environ.get("INFERENCE_URL", "")
+    MODEL_NAME    = os.environ.get("MODEL_NAME", "image-classifier")
+    IMG_SIZE      = int(os.environ.get("IMG_SIZE", "64"))
+    CLASSES       = os.environ.get("CLASSES", "intact,damaged,tampered").split(",")
+
+    DB_CONFIG = {
+        "host": os.environ.get("DB_HOST", "postgresql"),
+        "port": int(os.environ.get("DB_PORT", "5432")),
+        "dbname": os.environ.get("DB_NAME", "imagelab"),
+        "user": os.environ.get("POSTGRESQL_USER", "imagelab"),
+        "password": os.environ.get("POSTGRESQL_PASSWORD", "imagelab123"),
+    }
+
+    def get_db():
+        return psycopg2.connect(**DB_CONFIG)
+
+    def init_db():
+        for attempt in range(10):
+            try:
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS classifications (
+                        id SERIAL PRIMARY KEY,
+                        filename TEXT,
+                        predicted_class TEXT,
+                        confidence REAL,
+                        all_scores JSONB,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                conn.commit()
+                conn.close()
+                print("DB initialized")
+                return
+            except Exception as e:
+                print(f"DB init attempt {attempt+1}: {e}")
+                time.sleep(3)
+
+    init_db()
+
+    def preprocess(img_bytes):
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((IMG_SIZE, IMG_SIZE))
+        arr = np.array(img, dtype=np.float32) / 255.0
+        arr = np.transpose(arr, (2, 0, 1))
+        return np.expand_dims(arr, axis=0)
+
+    def run_inference(arr):
+        payload = {"inputs": [{"name": "images", "shape": list(arr.shape),
+                                "datatype": "FP32", "data": arr.flatten().tolist()}]}
+        url = f"{INFERENCE_URL}/v2/models/{MODEL_NAME}/infer"
+        r = requests.post(url, json=payload,
+                          headers={"Content-Type": "application/json"},
+                          verify=False, timeout=30)
+        r.raise_for_status()
+        scores = np.array(r.json()["outputs"][0]["data"])
+        exp_s  = np.exp(scores - scores.max())
+        probs  = (exp_s / exp_s.sum()).tolist()
+        return probs
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    @app.get("/config")
+    def config():
+        return {"inference_url": INFERENCE_URL, "model": MODEL_NAME,
+                "classes": CLASSES, "img_size": IMG_SIZE}
+
+    @app.post("/classify")
+    async def classify(file: UploadFile = File(...)):
+        if not INFERENCE_URL:
+            raise HTTPException(500, "INFERENCE_URL not set — deploy model first")
+        img_bytes = await file.read()
+        arr       = preprocess(img_bytes)
+        probs     = run_inference(arr)
+        top_idx   = int(np.argmax(probs))
+        result = {
+            "filename"       : file.filename,
+            "predicted_class": CLASSES[top_idx],
+            "confidence"     : round(probs[top_idx], 4),
+            "all_scores"     : {cls: round(p, 4) for cls, p in zip(CLASSES, probs)},
+        }
+        try:
+            conn = get_db()
+            cur  = conn.cursor()
+            cur.execute(
+                "INSERT INTO classifications (filename, predicted_class, confidence, all_scores) VALUES (%s,%s,%s,%s)",
+                (result["filename"], result["predicted_class"], result["confidence"],
+                 json.dumps(result["all_scores"]))
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"DB write error: {e}")
+        return result
+
+    @app.get("/history")
+    def history():
+        try:
+            conn = get_db()
+            cur  = conn.cursor()
+            cur.execute("SELECT id, filename, predicted_class, confidence, all_scores, created_at FROM classifications ORDER BY created_at DESC LIMIT 50")
+            rows = cur.fetchall()
+            conn.close()
+            return [{"id": r[0], "filename": r[1], "predicted_class": r[2],
+                     "confidence": r[3], "all_scores": r[4], "created_at": str(r[5])}
+                    for r in rows]
+        except Exception as e:
+            return {"error": str(e)}
+
+    if __name__ == "__main__":
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8000)
