@@ -1,0 +1,228 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-html
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Image Classifier — OpenShift AI Lab</title>
+      <style>
+        body{font-family:-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;background:#f5f5f5}
+        h1{color:#c00;font-size:22px}
+        .card{background:#fff;border-radius:8px;padding:24px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+        .upload-area{border:2px dashed #ccc;border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:border-color .2s}
+        .upload-area:hover{border-color:#c00}
+        button{background:#c00;color:#fff;border:none;padding:10px 24px;border-radius:4px;cursor:pointer;font-size:14px;margin-top:12px}
+        button:hover{background:#900}
+        button:disabled{background:#ccc}
+        .result{margin-top:20px;display:none}
+        .pred-class{font-size:28px;font-weight:700;color:#1a1a1a}
+        .confidence{font-size:16px;color:#666;margin-bottom:16px}
+        .bar-row{display:flex;align-items:center;margin-bottom:6px;gap:10px}
+        .bar-label{width:80px;font-size:13px;color:#333}
+        .bar-bg{flex:1;background:#eee;border-radius:3px;height:18px}
+        .bar-fill{height:100%;border-radius:3px;background:#c00;transition:width .4s}
+        .bar-pct{width:45px;font-size:12px;color:#666;text-align:right}
+        .history-item{padding:10px 0;border-bottom:1px solid #eee;font-size:13px}
+        .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+        .intact{background:#d1fae5;color:#065f46}
+        .damaged{background:#fee2e2;color:#b91c1c}
+        .tampered{background:#fef3c7;color:#92400e}
+        #preview{max-width:200px;max-height:200px;border-radius:6px;margin-top:12px;display:none}
+        .error{color:#c00;font-size:13px;margin-top:8px}
+      </style>
+    </head>
+    <body>
+      <h1>🔍 Image Classifier — OpenShift AI Lab</h1>
+      <p style="color:#666;font-size:13px">Classify parcel images as <strong>intact</strong>, <strong>damaged</strong>, or <strong>tampered</strong> using your fine-tuned YOLOv8 model served by KServe on OpenShift AI.</p>
+
+      <div class="card">
+        <h2 style="font-size:16px;margin-top:0">Upload an Image</h2>
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+          <p>Click to select an image<br><span style="font-size:12px;color:#999">JPG, PNG, WebP supported</span></p>
+          <img id="preview" src="" alt="preview">
+          <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="previewImage(event)">
+        </div>
+        <button id="classifyBtn" onclick="classifyImage()" disabled>Classify</button>
+        <div id="errorMsg" class="error"></div>
+
+        <div class="result" id="result">
+          <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
+          <div class="pred-class" id="predClass"></div>
+          <div class="confidence" id="predConf"></div>
+          <div id="scoreBars"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="font-size:16px;margin-top:0">Classification History</h2>
+        <button onclick="loadHistory()" style="background:#555">Refresh History</button>
+        <div id="historyList" style="margin-top:14px"></div>
+      </div>
+
+      <script>
+        const BACKEND = window.location.origin.replace('frontend','backend');
+
+        function previewImage(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const img = document.getElementById('preview');
+            img.src = ev.target.result;
+            img.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+          document.getElementById('classifyBtn').disabled = false;
+          document.getElementById('result').style.display = 'none';
+          document.getElementById('errorMsg').textContent = '';
+        }
+
+        async function classifyImage() {
+          const file = document.getElementById('fileInput').files[0];
+          if (!file) return;
+          const btn = document.getElementById('classifyBtn');
+          btn.disabled = true;
+          btn.textContent = 'Classifying...';
+          document.getElementById('errorMsg').textContent = '';
+
+          const form = new FormData();
+          form.append('file', file);
+
+          try {
+            const resp = await fetch(`${BACKEND}/classify`, {method:'POST', body: form});
+            if (!resp.ok) {
+              const err = await resp.json();
+              throw new Error(err.detail || resp.statusText);
+            }
+            const data = await resp.json();
+            showResult(data);
+          } catch(e) {
+            document.getElementById('errorMsg').textContent = 'Error: ' + e.message;
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Classify';
+          }
+        }
+
+        function showResult(data) {
+          const classes = ['intact','damaged','tampered'];
+          document.getElementById('predClass').innerHTML =
+            `<span class="badge ${data.predicted_class}">${data.predicted_class.toUpperCase()}</span>`;
+          document.getElementById('predConf').textContent =
+            `Confidence: ${(data.confidence*100).toFixed(1)}%`;
+
+          let bars = '';
+          for (const [cls, prob] of Object.entries(data.all_scores)) {
+            bars += `<div class="bar-row">
+              <div class="bar-label">${cls}</div>
+              <div class="bar-bg"><div class="bar-fill" style="width:${(prob*100).toFixed(1)}%"></div></div>
+              <div class="bar-pct">${(prob*100).toFixed(1)}%</div>
+            </div>`;
+          }
+          document.getElementById('scoreBars').innerHTML = bars;
+          document.getElementById('result').style.display = 'block';
+          loadHistory();
+        }
+
+        async function loadHistory() {
+          try {
+            const resp = await fetch(`${BACKEND}/history`);
+            const data = await resp.json();
+            const list = document.getElementById('historyList');
+            if (!data.length) { list.innerHTML = '<p style="color:#999;font-size:13px">No classifications yet.</p>'; return; }
+            list.innerHTML = data.map(r =>
+              `<div class="history-item">
+                <span class="badge ${r.predicted_class}">${r.predicted_class}</span>
+                &nbsp;<strong>${r.filename || 'image'}</strong>
+                &nbsp;<span style="color:#666">${(r.confidence*100).toFixed(1)}%</span>
+                &nbsp;<span style="color:#999;font-size:11px">${r.created_at}</span>
+              </div>`
+            ).join('');
+          } catch(e) {
+            document.getElementById('historyList').innerHTML =
+              '<p style="color:#c00;font-size:13px">Could not load history: ' + e.message + '</p>';
+          }
+        }
+
+        loadHistory();
+      </script>
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: nginx:alpine
+        ports:
+        - containerPort: 8080
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          cp /html/index.html /usr/share/nginx/html/index.html && \
+          sed -i 's|listen       80;|listen       8080;|g' /etc/nginx/conf.d/default.conf && \
+          nginx -g 'daemon off;'
+        volumeMounts:
+        - name: html
+          mountPath: /html
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: html
+        configMap:
+          name: frontend-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: image-rec-app
+spec:
+  to:
+    kind: Service
+    name: frontend
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

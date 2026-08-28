@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ── Instructor fills in the namespace before distributing ─────────────────────
+namespace: STUDENT_NAMESPACE_PLACEHOLDER
+
+resources:
+- ../../base
+
+# Patch the backend to inject the student-specific inference URL
+patches:
+- target:
+    kind: ConfigMap
+    name: backend-config
+  patch: |-
+    - op: add
+      path: /data/INFERENCE_URL
+      value: INFERENCE_URL_PLACEHOLDER
