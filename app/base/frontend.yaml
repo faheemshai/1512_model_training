@@ -9,63 +9,107 @@ data:
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Image Classifier — OpenShift AI Lab</title>
+      <title>PCB Defect Inspector — OpenShift AI Lab</title>
       <style>
-        body{font-family:-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;background:#f5f5f5}
-        h1{color:#c00;font-size:22px}
-        .card{background:#fff;border-radius:8px;padding:24px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-        .upload-area{border:2px dashed #ccc;border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:border-color .2s}
-        .upload-area:hover{border-color:#c00}
-        button{background:#c00;color:#fff;border:none;padding:10px 24px;border-radius:4px;cursor:pointer;font-size:14px;margin-top:12px}
-        button:hover{background:#900}
-        button:disabled{background:#ccc}
+        *{box-sizing:border-box}
+        body{font-family:-apple-system,"Segoe UI",sans-serif;max-width:860px;margin:40px auto;padding:0 20px;background:#f0f2f5}
+        h1{color:#161616;font-size:22px;margin-bottom:4px}
+        .subtitle{color:#525252;font-size:13px;margin-bottom:24px}
+        .card{background:#fff;border-radius:8px;padding:24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+        .upload-area{border:2px dashed #d0d0d0;border-radius:8px;padding:36px;text-align:center;cursor:pointer;transition:border-color .2s;background:#fafafa}
+        .upload-area:hover{border-color:#0f62fe}
+        .upload-area p{margin:0;color:#525252;font-size:14px}
+        .upload-area small{color:#8d8d8d;font-size:12px}
+        button.primary{background:#0f62fe;color:#fff;border:none;padding:10px 24px;border-radius:4px;cursor:pointer;font-size:14px;margin-top:12px;font-weight:500}
+        button.primary:hover{background:#0043ce}
+        button.primary:disabled{background:#c6c6c6;cursor:not-allowed}
+        button.secondary{background:#393939;color:#fff;border:none;padding:8px 18px;border-radius:4px;cursor:pointer;font-size:13px}
+        button.secondary:hover{background:#161616}
         .result{margin-top:20px;display:none}
-        .pred-class{font-size:28px;font-weight:700;color:#1a1a1a}
-        .confidence{font-size:16px;color:#666;margin-bottom:16px}
-        .bar-row{display:flex;align-items:center;margin-bottom:6px;gap:10px}
-        .bar-label{width:80px;font-size:13px;color:#333}
-        .bar-bg{flex:1;background:#eee;border-radius:3px;height:18px}
-        .bar-fill{height:100%;border-radius:3px;background:#c00;transition:width .4s}
-        .bar-pct{width:45px;font-size:12px;color:#666;text-align:right}
-        .history-item{padding:10px 0;border-bottom:1px solid #eee;font-size:13px}
-        .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
-        .intact{background:#d1fae5;color:#065f46}
-        .damaged{background:#fee2e2;color:#b91c1c}
-        .tampered{background:#fef3c7;color:#92400e}
-        #preview{max-width:200px;max-height:200px;border-radius:6px;margin-top:12px;display:none}
-        .error{color:#c00;font-size:13px;margin-top:8px}
+        /* Verdict banner */
+        .verdict-banner{padding:14px 18px;border-radius:6px;margin-bottom:16px;display:flex;align-items:center;gap:12px}
+        .verdict-banner.pass{background:#defbe6;border-left:5px solid #24a148}
+        .verdict-banner.fail{background:#fff1f1;border-left:5px solid #da1e28}
+        .verdict-icon{font-size:28px;line-height:1}
+        .verdict-title{font-size:20px;font-weight:700;color:#161616}
+        .verdict-sub{font-size:13px;color:#525252;margin-top:2px}
+        /* Action box */
+        .action-box{background:#f4f4f4;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px}
+        .action-label{font-weight:600;color:#161616;margin-bottom:2px}
+        .action-text{color:#525252}
+        .risk-pill{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;margin-left:8px;vertical-align:middle}
+        .risk-None{background:#defbe6;color:#0e6027}
+        .risk-Medium{background:#fdf1c0;color:#7d4b00}
+        .risk-High{background:#ffd6dd;color:#a2191f}
+        .risk-Critical{background:#750e13;color:#fff}
+        /* Score bars */
+        .bar-section{margin-top:4px}
+        .bar-section h3{font-size:13px;color:#525252;font-weight:500;margin:0 0 10px}
+        .bar-row{display:flex;align-items:center;margin-bottom:7px;gap:10px}
+        .bar-label{width:110px;font-size:12px;color:#393939;text-transform:capitalize}
+        .bar-bg{flex:1;background:#e0e0e0;border-radius:3px;height:16px}
+        .bar-fill{height:100%;border-radius:3px;transition:width .5s}
+        .bar-fill.pass-bar{background:#24a148}
+        .bar-fill.fail-bar{background:#da1e28}
+        .bar-pct{width:42px;font-size:12px;color:#525252;text-align:right}
+        /* History */
+        .history-item{padding:10px 0;border-bottom:1px solid #e0e0e0;font-size:13px;display:flex;align-items:center;gap:10px}
+        .badge{display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase}
+        .pass{background:#defbe6;color:#0e6027}
+        .contamination{background:#ffd6dd;color:#a2191f}
+        .crack{background:#750e13;color:#fff}
+        .scratch{background:#fdf1c0;color:#7d4b00}
+        #preview{max-width:220px;max-height:180px;border-radius:6px;margin-top:12px;display:none;object-fit:cover}
+        .error{color:#da1e28;font-size:13px;margin-top:8px}
+        .section-title{font-size:15px;font-weight:600;color:#161616;margin:0 0 16px}
       </style>
     </head>
     <body>
-      <h1>🔍 Image Classifier — OpenShift AI Lab</h1>
-      <p style="color:#666;font-size:13px">Classify parcel images as <strong>intact</strong>, <strong>damaged</strong>, or <strong>tampered</strong> using your fine-tuned YOLOv8 model served by KServe on OpenShift AI.</p>
+      <h1>🔬 PCB Defect Inspector</h1>
+      <p class="subtitle">Manufacturing Visual Quality Inspection — powered by YOLOv8 fine-tuned on OpenShift AI and served via KServe</p>
 
       <div class="card">
-        <h2 style="font-size:16px;margin-top:0">Upload an Image</h2>
+        <div class="section-title">Upload a PCB Image</div>
         <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-          <p>Click to select an image<br><span style="font-size:12px;color:#999">JPG, PNG, WebP supported</span></p>
+          <p>Click to select an image</p>
+          <small>JPG, PNG, WebP supported</small><br>
           <img id="preview" src="" alt="preview">
           <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="previewImage(event)">
         </div>
-        <button id="classifyBtn" onclick="classifyImage()" disabled>Classify</button>
+        <button class="primary" id="classifyBtn" onclick="classifyImage()" disabled>Inspect Component</button>
         <div id="errorMsg" class="error"></div>
 
         <div class="result" id="result">
-          <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
-          <div class="pred-class" id="predClass"></div>
-          <div class="confidence" id="predConf"></div>
-          <div id="scoreBars"></div>
+          <hr style="margin:20px 0;border:none;border-top:1px solid #e0e0e0">
+          <div id="verdictBanner" class="verdict-banner">
+            <div class="verdict-icon" id="verdictIcon"></div>
+            <div>
+              <div class="verdict-title" id="verdictTitle"></div>
+              <div class="verdict-sub" id="verdictSub"></div>
+            </div>
+          </div>
+          <div class="action-box">
+            <div class="action-label">
+              Recommended Action
+              <span class="risk-pill" id="riskPill"></span>
+            </div>
+            <div class="action-text" id="actionText"></div>
+          </div>
+          <div class="bar-section">
+            <h3>All Class Scores</h3>
+            <div id="scoreBars"></div>
+          </div>
         </div>
       </div>
 
       <div class="card">
-        <h2 style="font-size:16px;margin-top:0">Classification History</h2>
-        <button onclick="loadHistory()" style="background:#555">Refresh History</button>
+        <div class="section-title">Inspection History</div>
+        <button class="secondary" onclick="loadHistory()">Refresh</button>
         <div id="historyList" style="margin-top:14px"></div>
       </div>
 
       <script>
-        const BACKEND = '__BACKEND_URL__';  // replaced by deploy.sh at apply time
+        const BACKEND = '__BACKEND_URL__';
 
         function previewImage(e) {
           const file = e.target.files[0];
@@ -87,7 +131,7 @@ data:
           if (!file) return;
           const btn = document.getElementById('classifyBtn');
           btn.disabled = true;
-          btn.textContent = 'Classifying...';
+          btn.textContent = 'Inspecting...';
           document.getElementById('errorMsg').textContent = '';
 
           const form = new FormData();
@@ -105,22 +149,38 @@ data:
             document.getElementById('errorMsg').textContent = 'Error: ' + e.message;
           } finally {
             btn.disabled = false;
-            btn.textContent = 'Classify';
+            btn.textContent = 'Inspect Component';
           }
         }
 
         function showResult(data) {
-          const classes = ['intact','damaged','tampered'];
-          document.getElementById('predClass').innerHTML =
-            `<span class="badge ${data.predicted_class}">${data.predicted_class.toUpperCase()}</span>`;
-          document.getElementById('predConf').textContent =
-            `Confidence: ${(data.confidence*100).toFixed(1)}%`;
+          const isPass = data.verdict === 'PASS';
 
+          // Verdict banner
+          const banner = document.getElementById('verdictBanner');
+          banner.className = 'verdict-banner ' + (isPass ? 'pass' : 'fail');
+          document.getElementById('verdictIcon').textContent = isPass ? '✅' : '❌';
+          document.getElementById('verdictTitle').textContent =
+            (isPass ? 'PASS — ' : 'FAIL — ') + (data.predicted_class || '').toUpperCase();
+          document.getElementById('verdictSub').textContent =
+            `Confidence: ${(data.confidence * 100).toFixed(1)}%  ·  File: ${data.filename || 'image'}`;
+
+          // Action + risk
+          document.getElementById('actionText').textContent = data.action || '';
+          const pill = document.getElementById('riskPill');
+          pill.textContent = 'Risk: ' + (data.risk || 'Unknown');
+          pill.className = 'risk-pill risk-' + (data.risk || 'None').replace(' ', '');
+
+          // Score bars
           let bars = '';
           for (const [cls, prob] of Object.entries(data.all_scores)) {
+            const isPassClass = cls === 'pass';
             bars += `<div class="bar-row">
               <div class="bar-label">${cls}</div>
-              <div class="bar-bg"><div class="bar-fill" style="width:${(prob*100).toFixed(1)}%"></div></div>
+              <div class="bar-bg">
+                <div class="bar-fill ${isPassClass ? 'pass-bar' : 'fail-bar'}"
+                     style="width:${(prob*100).toFixed(1)}%"></div>
+              </div>
               <div class="bar-pct">${(prob*100).toFixed(1)}%</div>
             </div>`;
           }
@@ -134,18 +194,21 @@ data:
             const resp = await fetch(`${BACKEND}/history`);
             const data = await resp.json();
             const list = document.getElementById('historyList');
-            if (!data.length) { list.innerHTML = '<p style="color:#999;font-size:13px">No classifications yet.</p>'; return; }
+            if (!data.length) {
+              list.innerHTML = '<p style="color:#8d8d8d;font-size:13px">No inspections yet.</p>';
+              return;
+            }
             list.innerHTML = data.map(r =>
               `<div class="history-item">
                 <span class="badge ${r.predicted_class}">${r.predicted_class}</span>
-                &nbsp;<strong>${r.filename || 'image'}</strong>
-                &nbsp;<span style="color:#666">${(r.confidence*100).toFixed(1)}%</span>
-                &nbsp;<span style="color:#999;font-size:11px">${r.created_at}</span>
+                <strong>${r.filename || 'image'}</strong>
+                <span style="color:#525252">${(r.confidence*100).toFixed(1)}%</span>
+                <span style="color:#8d8d8d;font-size:11px;margin-left:auto">${r.created_at}</span>
               </div>`
             ).join('');
           } catch(e) {
             document.getElementById('historyList').innerHTML =
-              '<p style="color:#c00;font-size:13px">Could not load history: ' + e.message + '</p>';
+              '<p style="color:#da1e28;font-size:13px">Could not load history: ' + e.message + '</p>';
           }
         }
 

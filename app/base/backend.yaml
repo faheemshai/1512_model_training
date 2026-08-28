@@ -6,9 +6,9 @@ data:
   DB_HOST:      "postgresql"
   DB_PORT:      "5432"
   DB_NAME:      "imagelab"
-  MODEL_NAME:   "image-classifier"
-  IMG_SIZE:     "64"
-  CLASSES:      "intact,damaged,tampered"
+  MODEL_NAME:   "defect-classifier"
+  IMG_SIZE:     "96"
+  CLASSES:      "contamination,crack,pass,scratch"
 ---
 apiVersion: apps/v1
 kind: Deployment
