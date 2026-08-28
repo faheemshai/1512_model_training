@@ -54,11 +54,20 @@ BASE_BACKEND="${WORK_TMPDIR}/base/backend.yaml"
 # The overlay references '../../base'; in the temp dir it is at '../base'
 sed -i "s|../../base|../base|g"                              "${KUST}"
 
+# Derive the backend route hostname — pattern is backend-<namespace>.<cluster-domain>
+# Extract the cluster domain from the inference URL
+CLUSTER_DOMAIN=$(echo "${INFERENCE_URL}" | sed 's|https://[^.]*\.\([^/]*\).*|\1|')
+BACKEND_URL="https://backend-${NAMESPACE}.${CLUSTER_DOMAIN}"
+
 # Substitute all placeholders (Linux sed — no backup extension needed)
 sed -i "s|STUDENT_NAMESPACE_PLACEHOLDER|${NAMESPACE}|g"      "${KUST}"
 sed -i "s|INFERENCE_URL_PLACEHOLDER|${INFERENCE_URL}|g"       "${KUST}"
 sed -i "s|STUDENT_SECRET_NAME_PLACEHOLDER|${SECRET_NAME}|g"  "${KUST}"
 sed -i "s|STUDENT_SECRET_PLACEHOLDER|${SECRET_NAME}|g"       "${BASE_BACKEND}"
+# Inject the backend URL into the frontend HTML so the browser knows where to POST
+sed -i "s|__BACKEND_URL__|${BACKEND_URL}|g"                  "${WORK_TMPDIR}/base/frontend.yaml"
+
+echo "Backend URL injected into frontend: ${BACKEND_URL}"
 
 echo "Applying manifests..."
 oc apply -k "${WORK_TMPDIR}/student/" -n "${NAMESPACE}"
