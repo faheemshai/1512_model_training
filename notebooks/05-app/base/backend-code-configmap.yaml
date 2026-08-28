@@ -14,14 +14,42 @@ data:
     import boto3
     from botocore.client import Config
 
-    app = FastAPI(title="Image Classifier API")
+    app = FastAPI(title="Manufacturing Defect Classifier API")
     app.add_middleware(CORSMiddleware, allow_origins=["*"],
                        allow_methods=["*"], allow_headers=["*"])
 
     INFERENCE_URL = os.environ.get("INFERENCE_URL", "")
-    MODEL_NAME    = os.environ.get("MODEL_NAME", "image-classifier")
-    IMG_SIZE      = int(os.environ.get("IMG_SIZE", "64"))
-    CLASSES       = os.environ.get("CLASSES", "intact,damaged,tampered").split(",")
+    MODEL_NAME    = os.environ.get("MODEL_NAME", "defect-classifier")
+    IMG_SIZE      = int(os.environ.get("IMG_SIZE", "96"))
+    CLASSES       = os.environ.get("CLASSES", "contamination,crack,pass,scratch").split(",")
+
+    # Defect metadata — shown in API response and UI
+    DEFECT_META = {
+        "contamination": {
+            "label":   "Contamination",
+            "verdict": "FAIL",
+            "risk":    "High",
+            "action":  "Remove from line — risk of short circuit in field",
+        },
+        "crack": {
+            "label":   "Crack",
+            "verdict": "FAIL",
+            "risk":    "Critical",
+            "action":  "Quarantine — structural failure risk, potential recall",
+        },
+        "pass": {
+            "label":   "Pass",
+            "verdict": "PASS",
+            "risk":    "None",
+            "action":  "Approved — proceed to next assembly stage",
+        },
+        "scratch": {
+            "label":   "Scratch",
+            "verdict": "FAIL",
+            "risk":    "Medium",
+            "action":  "Hold for engineering review — possible signal integrity issue",
+        },
+    }
 
     DB_CONFIG = {
         "host": os.environ.get("DB_HOST", "postgresql"),
@@ -95,11 +123,16 @@ data:
         arr       = preprocess(img_bytes)
         probs     = run_inference(arr)
         top_idx   = int(np.argmax(probs))
+        top_class = CLASSES[top_idx]
+        meta      = DEFECT_META.get(top_class, {})
         result = {
             "filename"       : file.filename,
-            "predicted_class": CLASSES[top_idx],
+            "predicted_class": top_class,
             "confidence"     : round(probs[top_idx], 4),
             "all_scores"     : {cls: round(p, 4) for cls, p in zip(CLASSES, probs)},
+            "verdict"        : meta.get("verdict", ""),
+            "risk"           : meta.get("risk", ""),
+            "action"         : meta.get("action", ""),
         }
         try:
             conn = get_db()

@@ -18,7 +18,7 @@ patches:
       value: INFERENCE_URL_PLACEHOLDER
 
 # 2. Patch backend Deployment env vars to use the student-specific secret name
-#    (Bob replaces STUDENT_SECRET_NAME_PLACEHOLDER with e.g. student01-data-connection)
+#    (Bob replaces STUDENT_SECRET_NAME_PLACEHOLDER with e.g. student03-data-connection)
 - target:
     kind: Deployment
     name: backend
