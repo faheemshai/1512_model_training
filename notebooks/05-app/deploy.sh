@@ -2,11 +2,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # deploy.sh — Deploy the Image Recognition App to a student namespace
 #
-# Usage:
-#   ./deploy.sh <student_namespace> <inference_url>
+# Usage (from inside the workbench JupyterLab terminal):
+#   cd ~/lab-materials/notebooks/05-app
+#   bash deploy.sh <namespace> <inference_url>
 #
 # Example:
-#   ./deploy.sh student01 https://image-classifier-student01.apps.itz-t53413.hub01-lb.techzone.ibm.com
+#   bash deploy.sh student01 \
+#     https://image-classifier-student01.apps.itz-t53413.hub01-lb.techzone.ibm.com
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -14,7 +16,7 @@ NAMESPACE="${1:-}"
 INFERENCE_URL="${2:-}"
 
 if [[ -z "${NAMESPACE}" || -z "${INFERENCE_URL}" ]]; then
-  echo "Usage: $0 <namespace> <inference_url>"
+  echo "Usage: bash $0 <namespace> <inference_url>"
   exit 1
 fi
 
@@ -30,43 +32,45 @@ echo " S3 secret      : ${SECRET_NAME}"
 echo "══════════════════════════════════════════════════════"
 echo ""
 
-# Create a temp overlay dir with real values substituted
-TMPDIR=$(mktemp -d)
-trap "rm -rf ${TMPDIR}" EXIT
+# ── Grant image-puller RBAC so the namespace can pull registry.redhat.io images
+# that are cached via the OpenShift global pull secret (required for postgresql).
+echo "Granting image-puller RBAC for openshift namespace images..."
+oc policy add-role-to-user system:image-puller \
+  "system:serviceaccount:${NAMESPACE}:default" \
+  -n openshift 2>/dev/null || true
 
-# Recreate the expected directory structure:
-#   TMPDIR/
-#     base/         ← copy of 05-app/base
-#     student/      ← copy of 05-app/overlays/student  (references ../../base → ../base)
+# ── Create a temp overlay dir with real values substituted ─────────────────
+WORK_TMPDIR=$(mktemp -d)
+trap "rm -rf ${WORK_TMPDIR}" EXIT
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-mkdir -p "${TMPDIR}/base" "${TMPDIR}/student"
-cp -r "${SCRIPT_DIR}/base/."             "${TMPDIR}/base/"
-cp -r "${SCRIPT_DIR}/overlays/student/." "${TMPDIR}/student/"
+mkdir -p "${WORK_TMPDIR}/base" "${WORK_TMPDIR}/student"
+cp -r "${SCRIPT_DIR}/base/."             "${WORK_TMPDIR}/base/"
+cp -r "${SCRIPT_DIR}/overlays/student/." "${WORK_TMPDIR}/student/"
 
-KUST="${TMPDIR}/student/kustomization.yaml"
-BASE_BACKEND="${TMPDIR}/base/backend.yaml"
+KUST="${WORK_TMPDIR}/student/kustomization.yaml"
+BASE_BACKEND="${WORK_TMPDIR}/base/backend.yaml"
 
-# The overlay uses '../../base' but in tmpdir it is at '../base' — fix path
-sed -i "s|../../base|../base|g" "${KUST}"
+# The overlay references '../../base'; in the temp dir it is at '../base'
+sed -i "s|../../base|../base|g"                              "${KUST}"
 
-# Linux-compatible sed substitutions
-sed -i "s|STUDENT_NAMESPACE_PLACEHOLDER|${NAMESPACE}|g"       "${KUST}"
-sed -i "s|INFERENCE_URL_PLACEHOLDER|${INFERENCE_URL}|g"        "${KUST}"
-sed -i "s|STUDENT_SECRET_NAME_PLACEHOLDER|${SECRET_NAME}|g"   "${KUST}"
-# Replace placeholder in base backend.yaml
-sed -i "s|STUDENT_SECRET_PLACEHOLDER|${SECRET_NAME}|g"        "${BASE_BACKEND}"
+# Substitute all placeholders (Linux sed — no backup extension needed)
+sed -i "s|STUDENT_NAMESPACE_PLACEHOLDER|${NAMESPACE}|g"      "${KUST}"
+sed -i "s|INFERENCE_URL_PLACEHOLDER|${INFERENCE_URL}|g"       "${KUST}"
+sed -i "s|STUDENT_SECRET_NAME_PLACEHOLDER|${SECRET_NAME}|g"  "${KUST}"
+sed -i "s|STUDENT_SECRET_PLACEHOLDER|${SECRET_NAME}|g"       "${BASE_BACKEND}"
 
-echo "Applying manifests to namespace ${NAMESPACE}..."
-oc apply -k "${TMPDIR}/student/" -n "${NAMESPACE}"
+echo "Applying manifests..."
+oc apply -k "${WORK_TMPDIR}/student/" -n "${NAMESPACE}"
 
 echo ""
-echo "Waiting for PostgreSQL..."
+echo "Waiting for PostgreSQL (up to 3 min)..."
 oc rollout status deployment/postgresql -n "${NAMESPACE}" --timeout=180s
 
-echo "Waiting for backend..."
+echo "Waiting for backend (up to 5 min — installs Python packages on first start)..."
 oc rollout status deployment/backend -n "${NAMESPACE}" --timeout=300s
 
-echo "Waiting for frontend..."
+echo "Waiting for frontend (up to 2 min)..."
 oc rollout status deployment/frontend -n "${NAMESPACE}" --timeout=120s
 
 echo ""
