@@ -11,9 +11,10 @@ A single `git clone` inside your workbench gives you all notebooks, images, and 
 ├── models/
 │   └── yolov8n-cls.pt          ← Pre-trained YOLOv8n weights (5.3 MB, no download needed)
 ├── sample-images/
-│   ├── cardboard_box.jpg       ← Intact parcel seed image
-│   ├── damaged_package.jpg     ← Damaged parcel seed image
-│   └── street_scene.jpg        ← Street scene seed image
+│   ├── pass.png                ← Clean PCB (no defect)
+│   ├── scratch.jpg             ← Scratch defect
+│   ├── crack.jpg               ← Crack defect
+│   └── contamination.jpg       ← Contamination defect
 └── notebooks/
     ├── 01-validate/
     │   └── 01-validate-environment.ipynb
@@ -66,5 +67,5 @@ LAB = LOCAL_PATH   # all subsequent paths use LAB as the root
 | RHOAI version | 3.4.3 |
 | Dashboard | https://rh-ai.apps.itz-t53413.hub01-lb.techzone.ibm.com |
 | S3 internal endpoint | `http://s3.openshift-storage.svc:80` |
-| KServe URL pattern | `https://image-classifier-<namespace>.apps.itz-t53413.hub01-lb.techzone.ibm.com` |
+| KServe URL pattern | `https://defect-classifier-ext-<namespace>.apps.itz-t53413.hub01-lb.techzone.ibm.com` |
 | Workbench image | `pytorch:3.4` (Python 3.12, PyTorch 2.11) |
