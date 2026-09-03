@@ -39,6 +39,10 @@ spec:
           pip install --user --no-cache-dir \
             fastapi uvicorn psycopg2-binary boto3 requests \
             pillow numpy python-multipart -q
+          # main.py is supplied by the backend-app-code ConfigMap mounted at /app.
+          # When deploying via Bob prompts the code is embedded directly in the command
+          # (no volume needed). When deploying via kustomize, apply backend-code-configmap.yaml
+          # first so this volume mount resolves correctly.
           /tmp/.local/bin/uvicorn main:app \
             --host 0.0.0.0 --port 8000 --app-dir /app
         ports:
